@@ -5,7 +5,7 @@ It can run on a Baochip Dabao board.
 
 ## Building for Baochip
 
-This is only tested on Debian 13 (Trixie). YYMV for any other distro/OS.
+This is only tested on Debian 13 (Trixie). YMMV for any other distro/OS.
 
 1. Follow the
    [Dev Environment Setup](https://github.com/samblenny/baochip-sdk#dev-environment-setup)
