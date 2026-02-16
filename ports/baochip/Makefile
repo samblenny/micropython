@@ -23,12 +23,12 @@ INC += -I/usr/lib/picolibc/riscv64-unknown-elf/include
 
 CFLAGS += $(INC) -Wall -Werror -std=c99 -nostdlib $(COPT)
 CFLAGS += -march=rv32imac -mabi=ilp32
-LDFLAGS += -nostdlib -T stm32f405.ld -Map=$@.map --cref --gc-sections
 
 # Flags for optional C++ source code
 CXXFLAGS += $(filter-out -std=c99,$(CFLAGS))
 
-LIBS =
+LIBS = baochip-sdk/target/riscv32imac-unknown-none-elf/release/libbaochip_sdk.a
+LIBS += $(LIBC_DIR)/libc.a
 
 SRC_C = \
 	main.c \
@@ -53,16 +53,33 @@ $(BUILD)/_frozen_mpy.c: $(TOP)/tests/frozen/frozentest.mpy $(BUILD)/genhdr/qstrd
 	$(ECHO) "MISC freezing bytecode"
 	$(Q)$(TOP)/tools/mpy-tool.py -f -q $(BUILD)/genhdr/qstrdefs.preprocessed.h -mlongint-impl=none $< > $@
 
+# This uses riscv64-unknown-elf-gcc because riscv64-unknown-elf-ld doesn't work
 $(BUILD)/firmware.elf: $(OBJ)
+	$(ECHO) '---'
 	$(ECHO) "LINK $@"
-	$(Q)$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
-	$(Q)$(SIZE) $@
+	$(Q)riscv64-unknown-elf-gcc \
+		-march=rv32imac -mabi=ilp32 -nostartfiles -nostdlib \
+		-Tbaochip-sdk/link.x \
+		-Wl,--gc-sections \
+		-o $@ $^ $(LIBS)
 
 $(BUILD)/firmware.bin: $(BUILD)/firmware.elf
-	$(Q)$(OBJCOPY) -O binary -j .isr_vector -j .text -j .data $^ $(BUILD)/firmware.bin
+	$(ECHO) '---'
+	$(ECHO) 'Extracting loadable sections to firmware.bin:'
+	$(Q)$(OBJCOPY) -O binary $^ $(BUILD)/firmware.bin
+	$(ECHO) '---'
+	$(ECHO) 'Checking firmware.bin sections:'
+	$(Q)riscv64-unknown-elf-objdump -h $^
 
 $(BUILD)/firmware.uf2: $(BUILD)/firmware.bin
-	$(ECHO) "Create $@"
-	@echo "TODO: implement this"
+	@echo '---'
+	@echo "Signing firmware.bin as firmware.img:"
+	@python3 baochip-sdk/signer.py $^ $(BUILD)/firmware.img
+	@echo '---'
+	@echo "Packing firmware.img as $@:"
+	@python3 baochip-sdk/uf2ify.py $(BUILD)/firmware.img $@
+
+baochip-sdk/target/riscv32imac-unknown-none-elf/release/libbaochip_sdk.a:
+	make -C baochip-sdk release
 
 include $(TOP)/py/mkrules.mk
